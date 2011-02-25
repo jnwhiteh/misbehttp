@@ -1,8 +1,6 @@
 package main
 
-import "crypto/md5"
 import "fmt"
-import "io"
 import "log"
 import "net"
 import "os"
@@ -53,11 +51,12 @@ func TrickleRequest(host, url string, payload, min, max uint, counter *Counter) 
 		return
 	}
 
+	counter.Increment()
+
+	stupid := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	request := fmt.Sprintf("GET /%s HTTP/1.1\n", url)
 	for len(request) < int(payload) {
-		hash := md5.New()
-		io.WriteString(hash, request)
-		request = fmt.Sprintf("%sFakeData%d: \"%s\"\n", request, len(request), hash.Sum())
+		request = fmt.Sprintf("%sFakeData%d: \"%s\"\n", request, len(request), stupid)
 	}
 
 	bytes := []byte(request)

@@ -31,28 +31,29 @@ func main() {
 		needed := *num - numClients
 
 		if needed > 0 {
-			for i := needed; i >= 0; i-- {
-				ctype := rand.Intn(5)
+			tresp := 0
+			treq := 0
+			for i := needed; i > 0; i-- {
+				ctype := rand.Intn(2)
 				switch ctype {
 				case 0: // trickle response
 					min := uint(*respmin * 1e9)
 					max := uint(*respmax * 1e9)
 					go TrickleResponse(*host, *url, min, max, counter)
+					tresp++
 
 				case 1: // trickle request
 					min := uint(*reqmin * 1e9)
 					max := uint(*reqmax * 1e9)
 					go TrickleRequest(*host, *url, *reqlen, min, max, counter)
+					treq++
 
-				case 2:
-
-				case 3:
-
-				case 4:
+				default:
+					panic("this should not happen")
 				}
 			}
 
-			log.Printf("Opened %d new clients", needed)
+			log.Printf("Opened %d new clients (%d trickle_req, %d trickle_resp)", needed, treq, tresp)
 		}
 
 		// Sleep for a bit, then do everything again!
