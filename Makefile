@@ -1,7 +1,14 @@
 include $(GOROOT)/src/Make.inc
 
-TARG=main
+TARG=misbehttp
 GOFILES=\
-		main.go
+		main.go \
+		counter.go \
+		clients.go \
+#		trickle_req.go \
+		trickle_resp.go \
+		norequest.go \
+		disconnect.go \
+		badrequest.go \
 
 include $(GOROOT)/src/Make.cmd

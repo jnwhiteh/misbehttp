@@ -1,117 +1,61 @@
 package main
 
 import "flag"
-import "fmt"
 import "log"
-import "net"
-import "os"
+import "rand"
 import "time"
 
-type Counter struct {
-	value int
-	delta chan int
-	result chan int
-	status chan int
-	report func()
-}
+// Generate a stream of 'num' bad clients against a given host and url. The
+// ratio of different types of clients is random, but you can specify the
+// options of the different types of clients on the commandline.
 
-func NewCounter(tick int64) (*Counter, chan int) {
-	status := make(chan int)
-	counter := &Counter{
-		value: 0,
-		delta: make(chan int),
-		result: make(chan int),
-		status: status,
-	}
-	counter.report = func() {
-		counter.delta <- 0
-		counter.status <- <-counter.result
-		time.AfterFunc(tick, counter.report)
-	}
-
-	time.AfterFunc(tick, counter.report)
-	go counter.serve()
-	return counter, counter.status
-}
-
-func (c *Counter) Stop() {
-	close(c.delta)
-	close(c.result)
-	close(c.status)
-}
-
-func (c *Counter) serve() {
-	for delta := range c.delta {
-		c.value += delta
-		c.result <- c.value
-	}
-}
-
-func (c *Counter) Get() int {
-	c.delta <- 0
-	return <-c.result
-}
-
-func (c *Counter) Increment() int {
-	c.delta <- 1
-	return <-c.result
-}
-
-func (c *Counter) Decrement() int {
-	c.delta <- -1
-	return <-c.result
-}
-
-func TrickleClient(host, url string, delay int64, counter *Counter) {
-	conn, err := net.Dial("tcp", "", host)
-	if err != nil {
-		log.Printf("Failed to connect to web server: %s", err)
-		time.Sleep(delay)
-	} else {
-		counter.Increment()
-			fmt.Fprintf(conn, "GET /%s HTTP/1.1\n\n", url)
-
-			// Trickle receive the response one byte at a time
-			var buf []byte = make([]byte, 1, 1)
-
-			for {
-				n, err := conn.Read(buf)
-					if n == 0 && err == os.EOF {
-						break
-					}
-				if err != nil {
-					log.Printf("Got an error when reading: %s", err)
-						break
-				}
-				time.Sleep(delay)
-			}
-
-		counter.Decrement()
-	}
-
-	if conn != nil {
-		conn.Close()
-	}
-
-	TrickleClient(host, url, delay, counter)
-}
+var host *string = flag.String("host", "localhost:12345", "The host and port to contact")
+var url *string = flag.String("url", "/", "The URL to request")
+var num *int = flag.Int("num", 500, "The number of bad clients to sustain")
+var reqmin *float64 = flag.Float64("reqmin", 1.0, "Minimum delay time for trickle request (in seconds)")
+var reqmax *float64 = flag.Float64("reqmax", 5.0, "Maximum delay time for trickle request (in seconds)")
+var reqlen *uint = flag.Uint("reqlen", 1024, "Payload length for request data")
+var respmin *float64 = flag.Float64("respmin", 1.0, "Minimum delay time for trickle response (in seconds)")
+var respmax *float64 = flag.Float64("respmax", 5.0, "Maximum delay time for trickle response (in seconds)")
+var delay *float64 = flag.Float64("delay", 5.0, "Delay time for status report")
 
 func main() {
-	var host *string = flag.String("host", "localhost:12345", "The host to open a connection with")
-	var url *string = flag.String("url", "/", "The URL to request")
-	var num *int = flag.Int("num", 5, "The number of slow clients to open")
-	var delay *float64 = flag.Float64("delay", 1.0, "The delay in receiving each byte (in seconds)")
-
 	flag.Parse()
 
-	counter, status := NewCounter(1e9 * 2)
-	delaynano := int64(*delay * 1e9)
+	counter := NewCounter(0)
 
-	for i := 0; i < *num; i++ {
-		go TrickleClient(*host, *url, delaynano, counter)
-	}
+	for {
+		numClients := counter.Get()
+		log.Printf("%d clients are currently active", numClients)
 
-	for val := range status {
-		log.Printf("There are %d clients open", val)
+		needed := *num - numClients
+
+		if needed > 0 {
+			for i := needed; i >= 0; i-- {
+				ctype := rand.Intn(5)
+				switch ctype {
+				case 0: // trickle response
+					min := uint(*respmin * 1e9)
+					max := uint(*respmax * 1e9)
+					go TrickleResponse(*host, *url, min, max, counter)
+
+				case 1: // trickle request
+					min := uint(*reqmin * 1e9)
+					max := uint(*reqmax * 1e9)
+					go TrickleRequest(*host, *url, *reqlen, min, max, counter)
+
+				case 2:
+
+				case 3:
+
+				case 4:
+				}
+			}
+
+			log.Printf("Opened %d new clients", needed)
+		}
+
+		// Sleep for a bit, then do everything again!
+		time.Sleep(int64(*delay * 1e9))
 	}
 }
